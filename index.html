@@ -843,10 +843,14 @@ function villageChooser(seat){
   for(let i=0;i<seatsWanted();i++)if(teamForSeat(i)===t&&i<low)low=i;
   return low;
 }
+function playerAt(seat){
+  if(S.pend&&S.pend[seat])return S.pend[seat];
+  return (S.P||[]).find(q=>q&&q.seat===seat)||null;
+}
 function forcedVillage(seat){
   const chooser=villageChooser(seat);
   if(chooser===seat)return null;                       // you pick your own
-  const p=S.P[chooser];
+  const p=playerAt(chooser);
   return p?p.village:null;
 }
 function rollNature(v,clanId){
@@ -1871,7 +1875,8 @@ function viewTitle(){
         <button class="bkey" onclick="quickRejoin()">Rejoin</button>
         <button onclick="forgetSeat();render()">Forget it</button>
       </div></div>`:""}
-    <div class="row"><button onclick="loadGame()">Resume a same-screen file</button>${musButton()}</div>
+    <div class="row"><button onclick="loadGame()">Resume a same-screen file</button>
+      <button class="bcy" onclick="menuArchive()">\uD83D\uDCD8 How it works</button>${musButton()}</div>
     ${loadRecords().best&&loadRecords().best.length?`<div class="sp"></div>${viewRecords()}`:""}
     <div class="sp"></div>
     <p class="note" style="max-width:620px">Online play syncs a shared room record every couple of seconds. Anyone who guesses your
@@ -1923,7 +1928,9 @@ function viewJoin(){
   </div>`;
 }
 function viewWaiting(){
-  const need=seatsWanted(),have=NP();
+  const need=seatsWanted();
+  const filed=S.pend?Object.keys(S.pend).map(k=>S.pend[k]):S.P.slice();
+  const have=filed.length;
   return `<div style="padding:26px 0">
     <div class="eyebrow">Room open \u00b7 ${S.mode==="duo"?"Duo mode":S.mode==="coop"?"Co-op squad":"Rivals"} \u00b7 ${need} seats</div>
     <h1 style="font-size:clamp(26px,5.4vw,40px)">WAITING FOR<br><span class="tt">${need-have} MORE</span></h1>
@@ -1934,7 +1941,7 @@ function viewWaiting(){
     </div>
     ${S.mode==="duo"?`<div class="ribbon p" style="max-width:520px">${esc(pairingLabel(S.pairing||0))}</div>`:""}
     <div class="grid g2" style="max-width:640px">
-      ${S.P.map(q=>dossierMini(q)).join("")}
+      ${filed.map(q=>dossierMini(q)).join("")}
       ${Array.from({length:need-have}).map((_,k)=>`<div class="card" style="opacity:.45">
         <div style="display:flex;gap:11px;align-items:center">
           <div style="width:44px;height:44px;border-radius:50%;border:1px dashed var(--line2)"></div>
@@ -1959,10 +1966,14 @@ function dossierMini(p){
 
 /* ---------- creation: name, gender, village. Clan and nature are rolled. ---------- */
 function viewCreate(){
-  const d=S.draft,i=S.creating,v=VILLAGES[d.village];
+  const d=S.draft,i=S.creating;
+  const forced=forcedVillage(i);
+  if(forced)d.village=forced;                       // the choice is not yours to make
+  const v=VILLAGES[d.village];
+  const chooser=villageChooser(i);
   return `<div>
     <div class="eyebrow" style="margin-bottom:4px">Enrolment${online()?" \u00b7 room "+esc(NET.room)+" \u00b7 seat "+(NET.seat+1):""}</div>
-    <h1 style="font-size:clamp(24px,5vw,36px)">PLAYER ${i+1} <span class="dim" style="font-weight:500">of 2</span></h1>
+    <h1 style="font-size:clamp(24px,5vw,36px)">PLAYER ${i+1} <span class="dim" style="font-weight:500">of ${seatsWanted()}</span></h1>
 
     <div class="card" style="margin-top:14px"><span class="cap">Name</span>
       <input type="text" maxlength="22" value="${esc(d.name)}" placeholder="What will the record call you?"
@@ -1975,6 +1986,17 @@ function viewCreate(){
 
     <div class="sp"></div>
     <div class="card"><span class="cap">Village</span>
+      ${forced?`
+        <div style="display:flex;gap:12px;align-items:center">
+          ${emblem({village:forced,rogue:false},46)}
+          <div><div style="font-weight:850;font-size:16px">${esc(v.en)}</div>
+          <div class="eyebrow">${esc(v.n)} \u00b7 chosen by ${esc(playerAt(chooser)?playerAt(chooser).name:"player "+(chooser+1))}</div></div>
+        </div>
+        <div class="rule"></div>
+        <div class="note">${esc(v.blurb)}</div>
+        <div class="ribbon c" style="margin-top:10px">Your squad shares a village, so this one is settled for you.
+          <small>Blood is not. Any clan in the world can come up, and if yours is not native here the record will say your family moved.</small></div>`
+      :`
       <div class="grid g3" style="margin-top:4px">
         ${Object.keys(VILLAGES).filter(k=>VILLAGES[k].major).map(k=>vBtn(k,d)).join("")}
       </div>
@@ -1984,36 +2006,16 @@ function viewCreate(){
       </div>
       <div class="rule"></div>
       <div class="note">${esc(v.blurb)} Most people born here run ${v.nat} nature, but not all of them.</div>
+      ${(isCoop()&&seatsWanted()>1)?`<div class="ribbon c" style="margin-top:10px">
+        You are choosing for your whole squad.<small>Everyone with you will be from ${esc(v.en)} too.</small></div>`:""}
       <div style="margin-top:9px">
         <span class="eyebrow">Bloodlines that turn up here</span><br>
         <div style="margin-top:6px">${(CLANPOOL[d.village]||[]).filter(x=>x[0]!=="civilian").map(x=>
           `<span class="chip ${CLANS[x[0]].rare==="legendary"?"p":CLANS[x[0]].rare==="rare"?"g":""}">${esc(CLANS[x[0]].n)}</span>`).join("")||`<span class="chip">No clans, civilian stock only</span>`}</div>
-      </div>
+      </div>`}
     </div>
-
     <div class="sp"></div>
-    <div class="card"><span class="cap">Appearance</span>
-      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
-        <div style="text-align:center">
-          ${portrait({look:d.look,village:d.village,rogue:false,kgs:[]},132)}
-          <div class="row" style="margin-top:8px;justify-content:center">
-            <button onclick="S.draft.look=randomLook();render()">Randomise</button>
-          </div>
-        </div>
-        <div style="flex:1;min-width:230px">
-          ${lookRow("Face",FACES.map((f,i)=>[i,f]),d.look.face,"face")}
-          ${lookRow("Skin",SKIN.map((c,i)=>[i,c[2]]),d.look.skin,"skin",SKIN.map(c=>c[0]))}
-          ${lookRow("Hair",HAIRS.map((h,i)=>[i,h]),d.look.hair,"hair")}
-          ${lookRow("Hair colour",HAIRCOL.map((c,i)=>[i,c[2]]),d.look.hcol,"hcol",HAIRCOL.map(c=>c[0]))}
-          ${lookRow("Eye shape",EYESHAPE.map((e,i)=>[i,e]),d.look.eye,"eye")}
-          ${lookRow("Eye colour",EYECOL.map((c,i)=>[i,c[1]]),d.look.ecol,"ecol",EYECOL.map(c=>c[0]))}
-          ${lookRow("Markings",MARKS.map((m,i)=>[i,m]),d.look.mark,"mark")}
-        </div>
-      </div>
-    </div>
-
-    <div class="sp"></div>
-    <div class="ribbon c">Your clan and chakra nature are decided by blood, not by you.
+    <div class="ribbon c">${forced?"Any clan in the world can come up here.":"Your clan and chakra nature are decided by blood, not by you."}
       <small>You will find out what you are when the file opens.</small></div>
 
     <div class="row">
@@ -2047,15 +2049,26 @@ function confirmPlayer(){
   p.migrated=!!forced&&!clanNativeTo(p.clan,vil);
   S.P.push(p); rollBeast(p);
   if(online()){
-    // each machine files one seat, then waits for the rest of the room
-    S.creating=S.P.length;
-    if(S.P.length<seatsWanted()){S.screen="waiting";pushState();render();return}
-    startGame();return;
+    // held by seat number, so two people filing at once cannot overwrite each other
+    if(!S.pend)S.pend={};
+    S.pend[seat]=p;
+    S.P=S.P.filter(x=>x&&x.seat!==seat);          // this seat lives in pend until the room is full
+    if(Object.keys(S.pend).length<seatsWanted()){
+      S.screen="waiting";pushState();render();return;
+    }
+    assemble();startGame();return;
   }
   if(S.P.length<seatsWanted()){
     S.creating=S.P.length;S.draft=newDraft();render();return;
   }
   startGame();
+}
+/* Once every seat has filed, lay them out in seat order. */
+function assemble(){
+  if(!S.pend)return;
+  const out=[];
+  for(let i=0;i<seatsWanted();i++)if(S.pend[i])out.push(S.pend[i]);
+  if(out.length===seatsWanted()){S.P=out;S.pend=null;S.claims=null}
 }
 function startGame(){
   S.screen="game";S.year=1;S.turn=0;
@@ -2125,6 +2138,7 @@ function viewGame(){
 
     <div class="row" style="margin-top:12px">
       ${online()||NP()<2?"":`<button onclick="switchSeat(1)">Switch file \u203A</button>`}
+      <button class="bcy" onclick="menuArchive()">\uD83D\uDCD8 Archive</button>
       <button onclick="proposeReset()">Propose a full reset</button>
       <button onclick="if(confirm('Close both files and see the legacy screen?')){S.screen='legacy';touch();render()}">End the chronicle</button>
       <button class="bdanger" onclick="if(confirm('Discard everything and start over?')){leaveRoom()}">Quit to title</button>
@@ -2228,6 +2242,8 @@ function actionPanel(p,o){
   if(hideoutOpen(p)) acts.push(tile("menuHideout()","\uD83E\uDDEC","The hideout","Somebody who does not ask questions","hot",p.ap<1));
   if(p.rank>=1) acts.push(tile("menuLab()","\u2697\uFE0F","Invention lab","Build a technique nobody else has","hot",p.ap<1));
   acts.push(tile("menuCompound()","\uD83C\uDFEF","Clan compound","Spend ryo on every generation after you","",0));
+  if(p.rank>=1) acts.push(tile("menuMarket()","\uD83D\uDD76\uFE0F","Black market",
+    "Stock rotates yearly \u00b7 "+(BM().heat>=3?"heavily watched right now":"scalpel, forbidden scrolls, worse"),"hot",p.ap<1));
   const S1=[];
   if(arcPending(p)) S1.push(tile("openChapter()","\uD83D\uDCD6","Chapter "+(chapterIndex(arcPending(p))+1),
     arcPending(p).t,"hot",false));
@@ -3296,7 +3312,6 @@ function hideoutOpen(p){
   if(c==="senju"&&!kgLvlOf(p,"rinnegan"))return true;
   if(c==="uchiha"&&!kgLvlOf(p,"rinnegan"))return true;
   if((p.bag||[]).length)return true;
-  if(p.ryo>=35000&&p.clan!=="uzumaki"&&!p.scalpel)return true;
   if(p.blindEye&&(p.bag||[]).some(x=>x.ms))return true;
   return false;
 }
@@ -3336,9 +3351,6 @@ function menuHideout(){
     btns+=`<button class="act" onclick="sellEye(${i})"><span class="ic">\uD83D\uDCB0</span><span class="tx">
       <b>Sell the ${esc(KG[x.id].n)}</b><span>\u00a5${eyePrice(x)} and no questions</span></span></button>`;
   });
-  if(p.clan!=="uzumaki"&&!p.scalpel)
-    btns+=`<button class="act" onclick="buyScalpel()" ${p.ryo<35000?"disabled":""}><span class="ic">\uD83D\uDD2A</span><span class="tx">
-      <b>Buy the chakra scalpel technique</b><span>\u00a535000 \u00b7 the Uzumaki are born with it and everyone else pays</span></span></button>`;
   modal("The hideout","Nothing here is reversible",body,btns+`<button onclick="closeModal()">Leave</button>`,mySeat());
 }
 function buyScalpel(){
@@ -5156,6 +5168,250 @@ function marriageYear(p){
     say(`${M.years} years with ${p.partner.name}, and it is still ${harmonyWord(M.harmony)}.`,p.name,"good");
 }
 
+
+/* =====================================================================
+   THE BLACK MARKET
+   A different set of stock every year, none of it legal. Buying carries a
+   real chance of being fined or picked up, and being picked up costs you
+   the following year. Prices move with how hot things are.
+   ===================================================================== */
+const BMSTOCK=[
+ {id:"scalpel",n:"Chakra Scalpel technique",ic:"\uD83D\uDD2A",price:35000,heat:2,rare:2,
+  d:"Cuts nerve from muscle without opening skin. Against a dojutsu user it can take the eye out.",
+  own:p=>p.clan==="uzumaki"||p.scalpel,
+  buy:p=>{p.scalpel=true;bump(p,"control",4);return "You have the scalpel now. Nobody taught you it and nobody will admit selling it."}},
+ {id:"forbidden_clone",n:"Forbidden scroll: Shadow Clone",ic:"\uD83D\uDCDC",price:24000,heat:3,rare:3,
+  d:"The multi-clone method, copied out by hand. It costs a share of your life every time you use it properly.",
+  own:p=>p.jutsu.includes("clone")&&p.forbidden&&p.forbidden.clone,
+  buy:p=>{if(!p.forbidden)p.forbidden={};p.forbidden.clone=true;
+    if(!p.jutsu.includes("clone"))p.jutsu.push("clone");bump(p,"chakra",6);
+    return "The full version, not the academy one. It is going to take years off you."}},
+ {id:"forbidden_reaper",n:"Forbidden scroll: Reaper Seal",ic:"\u2620\uFE0F",price:62000,heat:5,rare:5,
+  d:"Trades your own life to seal what cannot be beaten. It works. That is the problem with it.",
+  own:p=>p.forbidden&&p.forbidden.reaper,
+  buy:p=>{if(!p.forbidden)p.forbidden={};p.forbidden.reaper=true;
+    return "You read it once and could not unread it. It is in you now, and it will only ever be used once."}},
+ {id:"forbidden_edo",n:"Forbidden scroll: Impure Resurrection",ic:"\uD83E\uDDFF",price:88000,heat:6,rare:6,
+  d:"Calls the dead back to fight for you, at the cost of somebody living.",
+  own:p=>p.forbidden&&p.forbidden.edo,
+  buy:p=>{if(!p.forbidden)p.forbidden={};p.forbidden.edo=true;p.karma-=14;
+    return "Every village outlawed this one separately, which tells you how well it works."}},
+ {id:"pills",n:"Case of soldier pills",ic:"\uD83D\uDC8A",price:9000,heat:1,rare:1,
+  d:"Battlefield chemistry. Your chakra pool grows and your body files a complaint later.",
+  own:()=>false,
+  buy:p=>{bump(p,"chakra",7);bump(p,"health",-2);return "Chemistry you will regret somewhere around fifty."}},
+ {id:"blade",n:"A blade with somebody else's name on it",ic:"\u2694\uFE0F",price:28000,heat:2,rare:3,
+  d:"Well made, well used, and taken off a body. It cuts better than it has any right to.",
+  own:p=>p.bmBlade,
+  buy:p=>{p.bmBlade=true;bump(p,"tai",6);bump(p,"speed",3);return "It has a notch in it that is not from a weapon."}},
+ {id:"map",n:"Stolen border charts",ic:"\uD83D\uDDFA\uFE0F",price:14000,heat:3,rare:2,
+  d:"Patrol routes and blind spots for three villages, current as of last month.",
+  own:()=>false,
+  buy:p=>{bump(p,"intel",5);bump(p,"speed",2);return "You know where nobody is looking now."}},
+ {id:"eye",n:"An eye in a jar",ic:"\uD83D\uDC41\uFE0F",price:52000,heat:4,rare:4,
+  d:"The dealer will not say whose it was, only that it was taken fresh.",
+  own:()=>false,
+  buy:p=>{if(!p.bag)p.bag=[];const id=pick(["sharingan","byakugan"]);
+    p.bag.push({id,from:"a jar with no label",ms:null,fresh:true});p.karma-=8;
+    return "You are carrying somebody's "+KG[id].n+" in your coat. The hideout can set it if you want it in your head."}},
+ {id:"antidote",n:"Broad-spectrum antidote kit",ic:"\uD83E\uDDEA",price:11000,heat:1,rare:1,
+  d:"Everything the medical corps will not issue without a form.",
+  own:()=>false,
+  buy:p=>{p.cond=clamp(p.cond+30,0,maxCond(p));bump(p,"health",4);return "Whatever is in you now, this will probably hold it off."}},
+ {id:"ledger",n:"A ledger of who owes whom",ic:"\uD83D\uDCD5",price:31000,heat:4,rare:3,
+  d:"Names, sums and dates across four villages. Worth more as leverage than as reading.",
+  own:()=>false,
+  buy:p=>{bump(p,"rep",9);bump(p,"intel",4);p.karma-=5;return "Several important people would pay a great deal for this not to exist."}}
+];
+function BM(){
+  if(!S.bm)S.bm={year:-1,stock:[],heat:0};
+  if(S.bm.year!==S.year)rollMarket();
+  return S.bm;
+}
+function rollMarket(){
+  const n=rnd(3,5);
+  const pool=BMSTOCK.slice();
+  const stock=[];
+  // rarer goods show up less often
+  for(let i=0;i<n&&pool.length;i++){
+    const w=[];pool.forEach(x=>{for(let k=0;k<(7-x.rare);k++)w.push(x)});
+    const chosen=pick(w);
+    pool.splice(pool.indexOf(chosen),1);
+    stock.push({id:chosen.id,mark:Math.round((0.8+Math.random()*0.5)*100)/100});
+  }
+  S.bm={year:S.year,stock,heat:(S.bm&&S.bm.year===S.year-1?S.bm.heat:0)};
+}
+function bmItem(id){return BMSTOCK.find(x=>x.id===id)}
+function bmPrice(p,e){
+  const it=bmItem(e.id);
+  return Math.round(it.price*e.mark*(1+(BM().heat||0)*0.06));
+}
+function bmRisk(p,e){
+  const it=bmItem(e.id);
+  let r=0.05+it.heat*0.022+(BM().heat||0)*0.02;
+  r-=clamp(p.rep/900,0,.05);              // a known name gets fewer questions
+  if(p.rogue)r+=0.06;                     // already wanted
+  if(p.corps==="anbu")r-=0.05;            // you know how these places work
+  return clamp(r,0.02,0.42);
+}
+function menuMarket(){
+  const p=me(),M=BM();
+  const body=`<p class="dim">Different stock every year, none of it through a village quartermaster. The more
+    heat there is on the district, the higher the prices and the worse the odds.</p>
+    <div class="kv"><span>Held</span><span class="gold">\u00a5 ${p.ryo}</span></div>
+    <div class="kv"><span>Heat on the district</span><span class="${M.heat>=4?"rd":M.heat>=2?"gold":"gr"}">${
+      M.heat>=5?"very high":M.heat>=3?"high":M.heat>=1?"some":"quiet"}</span></div>
+    ${p.arrested?`<div class="ribbon r" style="margin-top:9px">You are known here now.</div>`:""}`;
+  const btns=M.stock.map((e,i)=>{
+    const it=bmItem(e.id),price=bmPrice(p,e),risk=bmRisk(p,e),owned=it.own(p);
+    return `<button class="act ${owned?"":"bdanger"}" onclick="bmBuy(${i})" ${owned||p.ryo<price?"disabled":""}>
+      <span class="ic">${it.ic}</span><span class="tx"><b>${esc(it.n)}</b>
+      <span>${esc(it.d)}</span>
+      <span style="margin-top:4px">\u00a5${price} \u00b7 ${Math.round(risk*100)}% chance it goes wrong${
+        owned?" \u00b7 you already have this":p.ryo<price?" \u00b7 you cannot afford it":""}</span></span></button>`;
+  }).join("");
+  modal("The black market","Stock changes every year",body,
+    btns+`<button onclick="closeModal()">Walk out</button>`,mySeat());
+}
+function bmBuy(i){
+  const p=me(),M=BM(),e=M.stock[i];closeModal();
+  if(!e)return;
+  const it=bmItem(e.id),price=bmPrice(p,e),risk=bmRisk(p,e);
+  if(p.ryo<price||it.own(p))return;
+  p.ryo-=price;
+  M.heat=Math.min(8,(M.heat||0)+1);
+  // the deal itself
+  const line=it.buy(p);
+  say(`${p.name} bought ${it.n.toLowerCase()} for ${price} ryo. ${line}`,p.name,"good");
+  // and then whether anybody was watching
+  if(chance(risk)){
+    if(chance(.62)){
+      const fine=Math.round(price*(0.55+Math.random()*0.6))+rnd(1500,5000);
+      const paid=Math.min(p.ryo,fine);
+      p.ryo-=paid;bump(p,"rep",-6);p.karma-=3;
+      M.heat=Math.min(8,M.heat+2);
+      say(`Somebody was watching the stall. ${p.name} was fined ${paid} ryo${paid<fine?" and cannot pay the rest":""}, and the village has it on file.`,p.name,"bad");
+    }else{
+      p.arrested=1;p.apDebt=(p.apDebt||0)+3;      // the whole of next year
+      bump(p,"rep",-10);p.karma-=4;
+      M.heat=Math.min(8,M.heat+3);
+      say(`It was a sting. ${p.name} spent the next year in a holding cell answering the same four questions.`,p.name,"bad");
+    }
+  }
+  touch();spend(p,1);
+}
+
+
+/* =====================================================================
+   THE ARCHIVE
+   Plain explanations of how everything actually works, generated from the
+   real numbers where possible so it cannot drift out of date.
+   ===================================================================== */
+function archiveSections(){
+  const p=(S.P&&S.P.length)?me():null;
+  return [
+ {id:"year",n:"The year",ic:"\uD83D\uDCC5",body:()=>`
+   <p>Each year you get <b>three actions</b>. Spend them however you like, then end the year.
+   Everyone in the chronicle plays their own year at the same time and it rolls over once you have all finished.</p>
+   <p>Some things cost more: exams cost two or three, a joint operation leaves everyone
+   <b>a action short the following year</b>, and being arrested costs you a whole year.</p>
+   <div class="kv"><span>Condition</span><span class="dim">wounds. At zero you die.</span></div>
+   <div class="kv"><span>Renown</span><span class="dim">opens promotions, elections and better pay</span></div>
+   <div class="kv"><span>Power</span><span class="dim">everything added up, weighted, plus your bloodlines</span></div>`},
+ {id:"stats",n:"The eight attributes",ic:"\uD83D\uDCCA",body:()=>`
+   <div class="kv"><span>Chakra</span><span class="dim">how much you can spend in a fight</span></div>
+   <div class="kv"><span>Ninjutsu</span><span class="dim">damage on most elemental techniques</span></div>
+   <div class="kv"><span>Taijutsu</span><span class="dim">close damage, and part of your durability</span></div>
+   <div class="kv"><span>Genjutsu</span><span class="dim">illusions, and most Mangekyo powers</span></div>
+   <div class="kv"><span>Control</span><span class="dim">learning jutsu, inventing, sealing, Sage Mode</span></div>
+   <div class="kv"><span>Study</span><span class="dim">exam answers get marked for you when it is high enough</span></div>
+   <div class="kv"><span>Vitality</span><span class="dim">durability. Soaks a share of every hit taken.</span></div>
+   <div class="kv"><span>Speed</span><span class="dim">decides who moves first in a fight</span></div>
+   <p class="dim" style="margin-top:8px">Training slows sharply as an attribute climbs, so spreading effort
+   is usually worth more than pouring it all into one number.</p>`},
+ {id:"combat",n:"Fighting",ic:"\u2694\uFE0F",body:()=>`
+   <p><b>Speed decides the opening move</b>, not who attacked first. Vitality soaks damage both
+   proportionally and as a flat amount, so a durable fighter takes roughly half what a fragile one does.</p>
+   <p><b>Nature advantage</b> runs Fire beats Wind beats Lightning beats Earth beats Water beats Fire.
+   A strong match does <b>1.45x</b>, a bad one <b>0.65x</b>. Only your <i>first</i> nature can be exploited by an
+   attacker, but you can attack with either of yours.</p>
+   <div class="eyebrow" style="margin-top:9px">Status effects</div>
+   ${Object.keys(STATUS).map(k=>`<div class="kv"><span>${STATUS[k].ic} ${STATUS[k].n}</span><span class="dim">${STATUS[k].d}</span></div>`).join("")}`},
+ {id:"ranks",n:"Rank and promotion",ic:"\uD83C\uDF96\uFE0F",body:()=>`
+   <p>The ladder runs ${RANKS.join(" \u2192 ")}.</p>
+   <p>Exams open at a minimum age <i>or</i> early if your power is 15% above the bar. Each has a written
+   round, a survival round and a fight. The Chunin exam replaces the survival round with the forest.</p>
+   ${EXAMS.map(e=>`<div class="kv"><span>${esc(e.n)}</span><span class="dim">age ${e.minAge} or ${Math.round(e.pw*1.15)} power \u00b7 needs ${e.intel} study</span></div>`).join("")}
+   <p class="dim" style="margin-top:8px">Kage is not an exam. When the seat opens there is a four year window
+   to declare, then a campaign against council candidates who gain ground every year whether you do or not.</p>`},
+ {id:"forest",n:"The forest",ic:"\uD83C\uDF32",body:()=>`
+   <p>The second stage of the Chunin exam. Five to seven encounters, generated fresh every attempt, with
+   randomised opponents and thresholds.</p>
+   <p>You need <b>both scrolls</b> to pass, no matter how well you fought. Each choice is checked against a
+   different attribute, and picking one you are weak at costs condition.</p>
+   <p class="dim">People die in here. Roughly one candidate in twelve at low stats, and almost nobody who came prepared.</p>`},
+ {id:"blood",n:"Bloodlines",ic:"\uD83D\uDC41\uFE0F",body:()=>`
+   <p>Your clan is decided by blood, not chosen. What it carries stays dormant until you force it open,
+   and levels are earned separately after that.</p>
+   <p><b>Sharingan</b> reaches three tomoe, then the clan trial opens at Chunin. The Mangekyo grants Susanoo
+   plus one random power, and <b>twelve uses blinds you for life</b> unless you take a friend's eyes.</p>
+   <p><b>Byakugan</b> has five ranks, each giving a small buff. At the fifth, a second pair can become the Tenseigan.</p>
+   <p><b>The Rinnegan</b> is chased at the hideout from Jonin: Senju take a Sharingan, Uchiha take Senju cells.
+   Roughly seven in ten take, one in five leaves a permanent debuff, and one in ten kills you.</p>
+   <p><b>Uzumaki</b> are born with life conversion, sealing chains and the chakra scalpel. Everyone else buys
+   the scalpel on the black market.</p>`},
+ {id:"beast",n:"Tailed beasts",ic:"\uD83E\uDD8A",body:()=>`
+   <p>Trust runs in five tiers and each is gated twice: by your <b>rank</b>, and by passing that beast's
+   own <b>trial</b>. Sitting with it raises trust slowly and stops dead at the tier ceiling.</p>
+   ${BEASTTIER.map(t=>`<div class="kv"><span>${esc(t.n)}</span><span class="dim">ceiling ${t.cap} \u00b7 needs ${RANKS[t.rank]}</span></div>`).join("")}
+   <p class="dim" style="margin-top:8px">The cloak needs Chunin and 30 trust. Below 45 it burns you as well.
+   Each beast has its own temperament and answers differently.</p>`},
+ {id:"family",n:"Marriage and heirs",ic:"\uD83D\uDC8D",body:()=>`
+   <p>Marriage has a harmony meter that drifts down if you ignore it. Children come easier when things are
+   good between you: around <b>39% a year</b> when harmony is high, <b>11%</b> when it is not.</p>
+   <p>Vows set a direction for the rest of it: a family, each other's careers, or something quiet.</p>
+   <p>When you die you can continue as a child, be reborn into a new life, or reincarnate. Children inherit
+   bloodlines from both parents, so marrying across clans is how a line accumulates them.</p>
+   <p class="dim">Reincarnating wipes everything but permanently raises how fast the whole line grows.</p>`},
+ {id:"market",n:"The black market",ic:"\uD83D\uDD76\uFE0F",body:()=>`
+   <p>Stock changes every year and none of it is legal. Prices rise with how much heat is on the district,
+   and every purchase adds to it.</p>
+   <p>Each item carries a chance of going wrong. About half of those are a <b>fine</b> worth more than the
+   purchase; the other half is a <b>sting</b>, which costs you the whole of next year.</p>
+   <p class="dim">A high renown draws fewer questions, ANBU know how these places work, and being a missing-nin
+   makes everything worse.</p>`},
+ {id:"multi",n:"Playing together",ic:"\uD83E\uDD1D",body:()=>`
+   <p>Nobody waits for anybody. Everyone plays the same year at once and it turns over when you have all
+   ended it. If somebody goes quiet the others get a button to carry the year without them.</p>
+   <p><b>Joint operations</b> are invited: you name who you want and spend an action, they answer on their own
+   turn, and it opens once everyone has replied. Every stage is voted on and ties are settled by a coin.</p>
+   <p><b>Duels</b> are same-rank only, except that Jonin, Sannin and Kage count as one tier, and a missing-nin
+   can be fought at any rank above Genin. Lethal is a toggle both sides can see.</p>
+   <p class="dim">Closing your tab does not lock you out. Rejoin with the room code and pick your character back up.</p>`},
+ {id:"story",n:"The chronicle",ic:"\uD83D\uDCD6",body:()=>`
+   <p>A branching arc runs underneath everything. Chapters open for the whole room and everyone answers
+   separately; what the room decides moves two dials, trust between villages and how much stays buried.</p>
+   <p>Those dials start and end wars and decide which of five endings an age closes on. When one age ends
+   another opens, so the story outlives any single character.</p>
+   ${(S.arc&&S.arc.ch)?`<div class="rule"></div>
+     <div class="kv"><span>Trust between villages</span><span class="gold">${ARC().order}</span></div>
+     <div class="kv"><span>What stays buried</span><span class="pu">${ARC().secrets}</span></div>`:""}`}
+  ];
+}
+function menuArchive(id){
+  const secs=archiveSections();
+  const cur=secs.find(x=>x.id===(id||NET.arch))||secs[0];
+  NET.arch=cur.id;
+  const body=`<div class="row" style="margin-bottom:11px">
+      ${secs.map(s=>`<button class="${s.id===cur.id?"bkey":""}" style="padding:7px 10px;font-size:12px"
+        onclick="menuArchive('${s.id}')">${s.ic} ${esc(s.n)}</button>`).join("")}
+    </div>
+    <div class="card"><span class="cap">${esc(cur.n)}</span>
+      <div style="font-size:14.5px;line-height:1.6">${cur.body()}</div></div>`;
+  modal("The archive","How any of this works",body,
+    `<button onclick="closeModal()">Close</button>`,mySeat());
+}
+
 /* ------------------------- TURN LOOP ------------------------- */
 function allEnded(){for(let i=0;i<NP();i++)if(!S.ended[i])return false;return NP()>0}
 /* Let the room move on when somebody has clearly gone. */
@@ -5195,7 +5451,9 @@ function advanceYear(){
   S.P.forEach(p=>{
     if(p.dead)return;
     p.age++;
-    p.ap=3-(p.apDebt||0);p.apDebt=0;              // a joint job leaves you short the year after
+    p.ap=Math.max(0,3-(p.apDebt||0));
+    p.apDebt=Math.max(0,(p.apDebt||0)-3);         // a cell costs a whole year, a joint job one action
+    if(p.arrested&&p.ap>0)p.arrested=0;
     p.evt=chance(.30);
     marriageYear(p);
     if(p.cool)Object.keys(p.cool).forEach(k=>{p.cool[k]--;if(p.cool[k]<=0)delete p.cool[k]});
@@ -6280,7 +6538,9 @@ function mergeInto(remote){
   if((remote.year||0)>(S.year||0))return remote;
   if(remote.battle||remote.exam||remote.resetReq)return remote;
   const m=remote;
-  m.P[seat]=S.P[seat];
+  if(S.pend){m.pend=Object.assign({},m.pend||{},S.pend)}
+  if(S.claims){m.claims=Object.assign({},m.claims||{},S.claims)}
+  if(S.P[seat])m.P[seat]=S.P[seat];
   if(!m.ended)m.ended=[];
   m.ended[seat]=S.ended[seat];
   if(!m.house)m.house=[];
@@ -6328,7 +6588,11 @@ async function pullState(force){
    comparing them, each machine keeps its own file and always adopts the
    other's. That is idempotent, so repeated polls converge. */
 function adoptRemote(rem){
-  if(!rem||!rem.P||!rem.P.length)return;
+  if(!rem)return;
+  // during enrolment the roster is empty and everyone lives in pend, so an
+  // empty P is not a reason to skip the merge
+  const enrolling=rem.pend&&Object.keys(rem.pend).length;
+  if((!rem.P||!rem.P.length)&&!enrolling)return;
   const seat=NET.seat;
   if((rem.year||0)>(S.year||0)){
     const keep=(S.music&&(S.music.at||0)>((rem.music&&rem.music.at)||0))?S.music:null;
@@ -6357,6 +6621,12 @@ function adoptRemote(rem){
   if(rem.music&&(!S.music||!S.music.list||!S.music.list.length||(rem.music.at||0)>(S.music.at||0)))S.music=rem.music;
   if(rem.war&&rem.war.on&&!(S.war&&S.war.on))S.war=rem.war;
   if(rem.order)S.order=rem.order;
+  if(rem.claims){S.claims=Object.assign({},rem.claims,S.claims||{})}
+  if(rem.pend){
+    if(!S.pend)S.pend={};
+    Object.keys(rem.pend).forEach(k=>{if(+k!==seat&&!S.pend[k])S.pend[k]=rem.pend[k]});
+    if(Object.keys(S.pend).length>=(rem.np||S.np||2)&&S.screen==="waiting"){assemble();if(S.P.length===seatsWanted())startGame()}
+  }
   if(rem.seen){if(!S.seen)S.seen={};Object.keys(rem.seen).forEach(k=>{
     if(+k!==seat)S.seen[k]=Math.max(S.seen[k]||0,rem.seen[k])})}
   if(rem.bond){if(!S.bond)S.bond={};Object.keys(rem.bond).forEach(k=>{if(S.bond[k]==null)S.bond[k]=rem.bond[k]})}
@@ -6404,17 +6674,57 @@ function hostSetup(m){
   S.screen="create";S.creating=0;S.draft=newDraft();
   startPolling();render();
 }
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+async function readRoom(code){
+  try{const r=await STORE.get(roomKey(code||NET.room),true);return r&&r.value?JSON.parse(r.value):null}
+  catch(e){return null}
+}
+async function writeRoom(obj,code){
+  try{await STORE.set(roomKey(code||NET.room),JSON.stringify(obj),true);return true}catch(e){return false}
+}
+/* Reserving a seat: write a claim, wait, read it back. If somebody else's claim
+   is sitting there instead, they got it first and we try the next one. */
+function seatFree(rem,i){
+  const filled=(rem.P&&rem.P[i])||(rem.pend&&rem.pend[i]);
+  if(filled)return false;
+  const cl=rem.claims&&rem.claims[i];
+  if(!cl)return true;
+  if(cl.id===NET.cid)return true;
+  return (Date.now()-(cl.at||0))>45000;          // an abandoned claim frees up
+}
+async function reserveSeat(code,need){
+  if(!NET.cid)NET.cid="c"+Math.random().toString(36).slice(2,10);
+  for(let tries=0;tries<need+3;tries++){
+    const rem=await readRoom(code);
+    if(!rem)return {err:"gone"};
+    const free=[];
+    for(let i=0;i<need;i++)if(seatFree(rem,i))free.push(i);
+    if(!free.length)return {err:"full",rem};
+    const want=free[0];
+    if(!rem.claims)rem.claims={};
+    rem.claims[want]={id:NET.cid,at:Date.now()};
+    rem.rev=(rem.rev||0)+1;
+    await writeRoom(rem,code);
+    await sleep(350+Math.random()*450);          // let a rival claim land and be seen
+    const check=await readRoom(code);
+    if(check&&check.claims&&check.claims[want]&&check.claims[want].id===NET.cid)
+      return {seat:want,rem:check};
+  }
+  return {err:"busy"};
+}
 async function joinRoom(){
   const code=(NET.pendingCode||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
   if(code.length<5){NET.joinError="Room codes are five characters.";render();return}
-  NET.room=code;NET.seat=null;NET.status="connecting";NET.joinError="";
-  const rem=await pullState(true);
-  if(!rem){NET.room=null;NET.joinError="No room with that code. Check the spelling with the host.";S.screen="netjoin";render();return}
-  const need=rem.np||2;
-  if(!rem.P||rem.P.length>=need){
-    NET.rejoin=rem;S.screen="rejoin";render();return;      // full usually means you were in it
-  }
-  NET.seat=rem.P.length;
+  NET.room=code;NET.seat=null;NET.status="reserving a seat";NET.joinError="";
+  render();
+  const peek=await readRoom(code);
+  if(!peek){NET.room=null;NET.joinError="No room with that code. Check the spelling with the host.";S.screen="netjoin";render();return}
+  const need=peek.np||2;
+  const res=await reserveSeat(code,need);
+  if(res.err==="full"){NET.rejoin=res.rem||peek;S.screen="rejoin";render();return}
+  if(res.err){NET.room=null;NET.joinError="Could not get a seat. Try again in a moment.";S.screen="netjoin";render();return}
+  NET.seat=res.seat;NET.status="connecting";
+  S=res.rem;S.battle=null;S.exam=null;NET.pending=null;
   S.screen="create";S.creating=NET.seat;S.draft=newDraft();
   startPolling();render();
 }
