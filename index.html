@@ -1802,7 +1802,10 @@ const STORE={
 function render(){
   const a=$("#app");
   const V={title:viewTitle,netjoin:viewJoin,rejoin:viewRejoin,waiting:viewWaiting,pairing:viewPairing,create:viewCreate,game:viewGame,legacy:viewLegacy};
-  a.innerHTML=(V[S.screen]||viewTitle)();
+  const html=(V[S.screen]||viewTitle)();
+  // polling calls this every couple of seconds; repainting identical markup
+  // throws away focus, scroll position and any open dropdown
+  if(html!==NET.lastHTML){NET.lastHTML=html;a.innerHTML=html}
   const old=document.querySelector(".veil"); if(old)old.remove();
   if(S.joint&&S.joint.started&&jointInvolvesMe()) document.body.insertAdjacentHTML("beforeend",viewJoint());
   else if(S.joint&&jointAsksMe()&&canAct()) document.body.insertAdjacentHTML("beforeend",viewJointInvite());
@@ -3813,6 +3816,7 @@ function tick(f){
 function flip(){S.battle.turn=S.battle.turn==="A"?"B":"A"}
 function after(){
   const B=S.battle;
+  B.seq=(B.seq||0)+1;                                  // this copy has seen one more move
   [B.A,B.B].forEach(f=>{
     if(f.hp<=0&&f.rewrite){
       f.rewrite=false;f.hp=Math.round(f.max*0.35);
@@ -6523,6 +6527,21 @@ function canAct(){
 }
 function locked(){return !!(S.battle||S.exam||S.field||S.resetReq||NET.pending
   ||(S.joint&&S.joint.started&&jointInvolvesMe())||(S.joint&&jointAsksMe()))}
+/* Am I the one whose input a shared scene is waiting on? Only then may my copy
+   outrank the room's. A modal of my own is local furniture and must not stop
+   the world arriving. */
+function ownsSharedMoment(){
+  if(S.battle){
+    const a=S.battle.turn==="A"?S.battle.aIdx:S.battle.bIdx;
+    const own=a>=0?a:(S.battle.owner!=null?S.battle.owner:0);
+    return !online()||own===NET.seat;
+  }
+  if(S.exam)return !online()||S.exam.seat===NET.seat;
+  if(S.field)return !online()||S.field.seat===NET.seat;
+  if(S.resetReq)return true;
+  if(S.joint&&S.joint.started)return jointInvolvesMe();
+  return false;
+}
 function touch(){if(!online())return;clearTimeout(NET.pushT);NET.pushT=setTimeout(pushState,280)}
 /* Both seats play the same year at once, so a plain overwrite would lose
    whatever the other machine did in the meantime. Read, merge our own slice
@@ -6599,8 +6618,17 @@ function adoptRemote(rem){
     S=rem;if(keep)S.music=keep;return;                  // they rolled the year over
   }
   if((S.year||0)>(rem.year||0))return;                 // we did, ours stands
-  if(locked()&&canAct())return;                        // we own a shared moment
-  if(rem.battle||rem.exam||rem.resetReq){S=rem;return} // they opened one
+  // A fight advances by move count. Whoever has seen more moves holds the real
+  // state, regardless of whose turn it is: otherwise the idle side pushes a
+  // stale copy back over the move that was just made.
+  if(rem.battle||S.battle){
+    const theirs=rem.battle?(rem.battle.seq||0):-1;
+    const mine=S.battle?(S.battle.seq||0):-1;
+    if(theirs>mine){S=rem;return}
+    if(mine>theirs)return;
+  }
+  if(ownsSharedMoment())return;                        // only if the scene is waiting on me
+  if(rem.exam||rem.resetReq){S=rem;return} // they opened one
   if(!S.house)S.house=[];
   if(!S.ended)S.ended=[];
   for(let i=0;i<rem.P.length;i++){
