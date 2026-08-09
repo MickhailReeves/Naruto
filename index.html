@@ -1808,6 +1808,7 @@ const STORE={
   }
 };
 
+const BUILD="2026-08-09.1047";
 /* ------------------------- RENDER ------------------------- */
 function render(){
   const a=$("#app");
@@ -1898,6 +1899,7 @@ function viewTitle(){
         <button class="bkey" onclick="quickRejoin()">Rejoin</button>
         <button onclick="forgetSeat();render()">Forget it</button>
       </div></div>`:""}
+    <div class="note" style="margin-bottom:10px">Build <b>${BUILD}</b> \u00b7 everyone playing together must show this same number.</div>
     <div class="row"><button onclick="loadGame()">Resume a same-screen file</button>
       <button class="bcy" onclick="menuArchive()">\uD83D\uDCD8 How it works</button>${musButton()}</div>
     ${loadRecords().best&&loadRecords().best.length?`<div class="sp"></div>${viewRecords()}`:""}
@@ -2164,7 +2166,7 @@ function viewGame(){
   return `<div>
     ${online()?`<div class="eyebrow" id="netstatus" style="margin-bottom:8px">${esc(netLine())}</div>`:""}
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:9px">
-      <div class="eyebrow">${musButton()} Year ${S.year} \u00b7 ${S.mode==="coop"?"Co-op squad":"Rival files"}${NET.god?` <span class="ghost" style="color:var(--purple);cursor:pointer" onclick="NET.godOpen=true;render()">\u25C6</span>`:""}</div>
+      <div class="eyebrow" title="build ${BUILD}">${musButton()} Year ${S.year} \u00b7 ${S.mode==="coop"?"Co-op squad":"Rival files"}${NET.god?` <span class="ghost" style="color:var(--purple);cursor:pointer" onclick="NET.godOpen=true;render()">\u25C6</span>`:""}</div>
       <div class="eyebrow">${S.P.map(q=>esc(q.name)+" age "+q.age).join(" \u00b7 ")}</div>
     </div>
     <div class="seats">${S.P.map((q,i)=>seatCard(q,i)).join("")}</div>
