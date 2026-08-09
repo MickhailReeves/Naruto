@@ -1829,9 +1829,12 @@ function render(){
   else if(NET.godOpen) veil=viewGodPanel();
   // rebuild the overlay only when it actually changes, or a poll every couple
   // of seconds tears the open panel down and puts an identical one back
-  if(veil!==NET.lastVeil){
+  const shown=document.querySelector(".veil");
+  // rebuild when the markup changes, and also whenever the screen disagrees
+  // with what should be there, so a stale panel can never be left behind
+  if(veil!==NET.lastVeil||(!veil&&shown)||(veil&&!shown)){
     NET.lastVeil=veil;
-    const old=document.querySelector(".veil"); if(old)old.remove();
+    document.querySelectorAll(".veil").forEach(e=>e.remove());
     if(veil) document.body.insertAdjacentHTML("beforeend",veil);
   }
   const bl=document.getElementById("blog"); if(bl)bl.scrollTop=bl.scrollHeight;
@@ -3707,6 +3710,7 @@ function startBattle(a,b,kind,tag){
            `<span class="sys">${a.nat} against ${b.nat} · ${natMult(a.nat,b.nat)>1?a.name+" holds the nature advantage":natMult(b.nat,a.nat)>1?b.name+" holds the nature advantage":"neither nature dominates"}</span>`],
     aIdx:ai,bIdx:bi,owner:ai>=0?ai:bi};
   touch();render();
+  S.battle.id="b"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   rollInitiative();
   render();
   if((S.battle.turn==="A"?S.battle.A:S.battle.B).ai)setTimeout(aiTurn,600);
@@ -3730,7 +3734,7 @@ function viewBattle(){
     <div class="fbox">${side(A)}<div class="vs">VS</div>${side(D,1)}</div>
     <div class="blog" id="blog">${B.lines.slice(-10).map(l=>`<div>${l}</div>`).join("")}</div>
     ${B.over
-      ? (iClose?`<button class="bkey" onclick="finishBattle()">Close the report</button>`:`<div class="note">Waiting for the other machine.</div>`)
+      ? `<button class="bkey" onclick="finishBattle()">Close the report</button>`
       : !iCtrl?`<div class="note">Waiting for ${esc(cur.name)} to move.</div>`
       : cur.ai?`<button class="bkey" onclick="aiTurn()">Continue</button>`
       : `<div class="eyebrow" style="margin-bottom:7px">${esc(cur.name)} acts</div>
@@ -3895,7 +3899,9 @@ function after(){
 }
 function finishBattle(){
   const B=S.battle;if(!B||!B.over)return;
-  if(online()&&B.owner!==NET.seat){pullState();return}
+  NET.closedBattle=B.id;                        // this machine is done with it
+  if(B.resolved){S.battle=null;touch();render();return}
+  B.resolved=true;                              // whoever gets here first settles it
   const aWin=B.A.hp>0,w=aWin?B.A:B.B,l=aWin?B.B:B.A;
   const wp=w.p,lp=l.p;
   S.battle=null;
@@ -3987,7 +3993,7 @@ function duelSetup(seat){
      <div class="kv"><span>${esc(p.name)}</span><span class="gold">\u26A1 ${power(p)}${av?" \u00d7 2":""}</span></div>
      <div class="kv"><span>${esc(o.name)}</span><span class="gold">\u26A1 ${power(o)}</span></div>
      <div class="rule"></div>
-     <div class="tog ${S.lethal?"on":""}" onclick="S.lethal=!S.lethal;render()"><span class="sw"></span>
+     <div class="tog ${S.lethal?"on":""}" onclick="toggleLethal('duel')"><span class="sw"></span>
        <span><b>Lethal</b><br><span class="dim" style="font-size:12.5px">${S.lethal
          ?"The loser dies. They start a new life, and their child can come for you."
          :"Neither of you dies. Wounds and renown only."}</span></span></div>`,
@@ -4009,13 +4015,20 @@ function bountyHunt(seat){
     `<p>${esc(o.name)} is listed as ${esc(ROGUE[o.rogueRank])}. The village will pay, and will not ask how.</p>
      <div class="kv"><span>Bounty</span><span class="gold">\u00a5 ${3000+o.rogueRank*4000}</span></div>
      <div class="rule"></div>
-     <div class="tog ${S.lethal?"on":""}" onclick="S.lethal=!S.lethal;render()"><span class="sw"></span>
+     <div class="tog ${S.lethal?"on":""}" onclick="toggleLethal('hunt')"><span class="sw"></span>
        <span><b>Bring them in dead</b><br><span class="dim" style="font-size:12.5px">${S.lethal
          ?"If you win, they die permanently."
          :"Capture only. They live."}</span></span></div>`,
     `<button class="act bdanger" onclick="closeModal();startHunt()"><span class="ic">\uD83C\uDFAF</span>
       <span class="tx"><b>Take the contract</b><span>Two actions</span></span></button>
      <button onclick="closeModal()">Leave it on the board</button>`,mySeat());
+}
+/* A modal keeps a snapshot of its own markup, so flipping a switch inside one
+   has to build the panel again or nothing appears to move. */
+function toggleLethal(which){
+  S.lethal=!S.lethal;
+  if(which==="hunt")bountyHunt(NET.duelTarget);
+  else duelSetup(NET.duelTarget);
 }
 function startHunt(){
   const p=me(),o=S.P[NET.duelTarget!=null?NET.duelTarget:(them()||{}).seat];
@@ -6252,7 +6265,18 @@ function godT(){
   if(i>=S.P.length)i=NET.godTarget=S.P.length-1;
   return S.P[i]||S.P[0];
 }
-function godPush(){touch();render()}
+/* The sync layer only ever publishes your own seat, so an edit made to
+   somebody else has to be handed to them explicitly. It is left in the room
+   addressed to that seat; their machine applies it and acknowledges. */
+function godPush(){
+  const i=NET.godTarget||0;
+  if(online()&&i!==NET.seat&&S.P[i]){
+    if(!S.inject)S.inject={};
+    S.inject[i]={at:Date.now(),by:NET.seat,p:JSON.parse(JSON.stringify(S.P[i]))};
+  }
+  touch();render();
+  if(online())pushState();
+}
 function godGuard(fn){return function(){if(!godT())return;return fn.apply(null,arguments)}}
 function godSet(f,v){if(!godT())return;const p=godT();p[f]=v;godPush()}
 function godStat(k,d){if(!godT())return;const p=godT();p[k]=clamp(Math.round((p[k]||0)+d),0,CAP*2);godPush()}
@@ -6616,6 +6640,7 @@ function mergeInto(remote){
   if((remote.year||0)>(S.year||0))return remote;
   if(remote.battle||remote.exam||remote.resetReq)return remote;
   const m=remote;
+  if(S.inject){m.inject=Object.assign({},m.inject||{},S.inject)}
   if(S.pend){m.pend=Object.assign({},m.pend||{},S.pend)}
   if(S.claims){m.claims=Object.assign({},m.claims||{},S.claims)}
   if(S.P[seat])m.P[seat]=S.P[seat];
@@ -6683,6 +6708,7 @@ function adoptRemote(rem){
   // A fight advances by move count. Whoever has seen more moves holds the real
   // state, regardless of whose turn it is: otherwise the idle side pushes a
   // stale copy back over the move that was just made.
+  if(rem.battle&&rem.battle.id&&rem.battle.id===NET.closedBattle)rem=Object.assign({},rem,{battle:null});
   if(rem.battle||S.battle){
     const theirs=rem.battle?(rem.battle.seq||0):-1;
     const mine=S.battle?(S.battle.seq||0):-1;
@@ -6695,6 +6721,10 @@ function adoptRemote(rem){
   if(!S.ended)S.ended=[];
   for(let i=0;i<rem.P.length;i++){
     if(i===seat)continue;                              // my own file stays mine
+    // a seat I am editing from the admin panel stays as I left it until the
+    // change has had time to reach them, or each edit undoes the last
+    if(S.inject&&S.inject[i]&&Date.now()-(S.inject[i].at||0)<15000
+       &&(!rem.inject||!rem.inject[i]||(S.inject[i].at||0)>(rem.inject[i].at||0)))continue;
     if(rem.P[i])S.P[i]=rem.P[i];
     if(rem.house&&rem.house[i])S.house[i]=rem.house[i];
     if(rem.ended)S.ended[i]=!!rem.ended[i];
@@ -6722,6 +6752,17 @@ function adoptRemote(rem){
   if(rem.music&&(!S.music||!S.music.list||!S.music.list.length||(rem.music.at||0)>(S.music.at||0)))S.music=rem.music;
   if(rem.war&&rem.war.on&&!(S.war&&S.war.on))S.war=rem.war;
   if(rem.order)S.order=rem.order;
+  // an edit addressed to me from the admin panel on another machine
+  if(rem.inject&&rem.inject[seat]&&(rem.inject[seat].at||0)>(NET.injectAt||0)){
+    NET.injectAt=rem.inject[seat].at;
+    S.P[seat]=rem.inject[seat].p;
+    say("Something rewrote the record.",S.P[seat]?S.P[seat].name:"",'big');
+  }
+  if(rem.inject){
+    S.inject=Object.assign({},rem.inject,S.inject||{});
+    // drop anything addressed to me that I have already taken
+    if(S.inject[seat]&&(S.inject[seat].at||0)<=(NET.injectAt||0))delete S.inject[seat];
+  }
   if(rem.claims){S.claims=Object.assign({},rem.claims,S.claims||{})}
   if(rem.pend){
     if(!S.pend)S.pend={};
