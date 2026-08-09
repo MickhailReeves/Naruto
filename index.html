@@ -1297,11 +1297,11 @@ function headPath(face){
 }
 /* Every style shares one outer skull arc, so the hair always sits on the head
    instead of floating near it. Spikes and tails are rooted inside the cap. */
-const CAP_OUT="M23 52 C22 27 34 13 50 13 C66 13 78 27 77 52";
-const HAIRLINE_ROUND=" C75 42 71 36 65 33 C58 30 42 30 35 33 C29 36 25 42 23 52 Z";
-const HAIRLINE_BLUNT=" L77 40 L23 40 Z";
-const HAIRLINE_PART =" C75 42 72 34 66 31 C61 29 55 31 52 37 L50 41 L48 37 C45 31 39 29 34 31 C28 34 25 42 23 52 Z";
-const HAIRLINE_HIGH =" C75 38 70 31 63 28 C57 26 43 26 37 28 C30 31 25 38 23 52 Z";
+const CAP_OUT="M25 66 C19 60 20 30 33 19 C42 13 58 13 67 19 C80 30 81 60 75 66";
+const HAIRLINE_ROUND=" C74 56 73 44 67 38 C60 34 40 34 33 38 C27 44 26 56 25 66 Z";
+const HAIRLINE_BLUNT=" C74 56 74 46 73 45 L27 45 C26 46 26 56 25 66 Z";
+const HAIRLINE_PART =" C74 56 73 42 67 37 C61 34 55 36 52 43 L50 47 L48 43 C45 36 39 34 33 37 C27 42 26 56 25 66 Z";
+const HAIRLINE_HIGH =" C74 54 71 38 64 33 C57 30 43 30 36 33 C29 38 26 54 25 66 Z";
 const HAIRS=["Spiked","Fanned back","Swept fringe","Short crop","Long straight","High ponytail",
  "Twin buns","Shaggy","Bowl cut","Topknot","Wild mane","Braid","Shaved sides","Curtain bangs",
  "Slicked back","Bob","Windswept","Over one eye","Nape tail","Gathered tail","Loose part",
@@ -1406,7 +1406,7 @@ function portrait(p,size,opt){
   const hair=hairPaths(HAIRS[L.hair%HAIRS.length]);
   const id=lookKey(p,L,s,opt);
   const dj=opt.noEyes?null:dojutsuOf(p);
-  const eyeY=54;
+  const eyeY=59;
   let iris=`<circle cx="0" cy="0" r="3.1" fill="${ec}"/><circle cx="1" cy="-1" r="1.1" fill="#fff" opacity=".85"/>`;
   if(dj&&dj.id==="sharingan"){
     const tom=[0,1,2].slice(0,Math.min(3,dj.lvl)).map(i=>{const a=i*120*Math.PI/180;
@@ -1431,11 +1431,11 @@ function portrait(p,size,opt){
   })[MARKS[L.mark%MARKS.length]]||"";
   const band=opt.noBand?"":(()=>{
     const v=VILLAGES[p.village]||VILLAGES.konoha;
-    const scr=p.rogue?`<line x1="42" y1="42" x2="58" y2="50" stroke="#C0392B" stroke-width="1.9" stroke-linecap="round"/>`:"";
-    return `<g><rect x="19" y="41" width="62" height="10" rx="1.6" fill="${v.cloth}"/>
-      <rect x="19" y="41" width="62" height="2.2" fill="rgba(255,255,255,.18)"/>
-      <rect x="38" y="40" width="24" height="12" rx="2" fill="url(#mt${id})" stroke="#5C666E" stroke-width=".6"/>
-      <g transform="translate(43,42)" color="#39424A">${crestPath(p.village,13)}</g>${scr}</g>`;
+    const scr=p.rogue?`<line x1="42" y1="44" x2="58" y2="51" stroke="#C0392B" stroke-width="1.9" stroke-linecap="round"/>`:"";
+    return `<g><rect x="21" y="43" width="58" height="9.5" rx="1.6" fill="${v.cloth}"/>
+      <rect x="21" y="43" width="58" height="2" fill="rgba(255,255,255,.18)"/>
+      <rect x="39" y="42" width="22" height="11.5" rx="2" fill="url(#mt${id})" stroke="#5C666E" stroke-width=".6"/>
+      <g transform="translate(43.5,43.8)" color="#39424A">${crestPath(p.village,12)}</g>${scr}</g>`;
   })();
   return `<span class="pt" style="width:${s}px;height:${s}px;display:inline-block;flex:0 0 ${s}px">
   <svg viewBox="0 0 100 100" width="${s}" height="${s}">
@@ -1448,17 +1448,18 @@ function portrait(p,size,opt){
    </defs>
    ${hair.b?`<path d="${hair.b}" fill="url(#hr${id})"/>`:""}
    <path d="M40 74h20v12a10 10 0 0 1 -20 0z" fill="${sk[1]}"/>
-   <ellipse cx="22" cy="54" rx="3.4" ry="5" fill="${sk[1]}"/><ellipse cx="78" cy="54" rx="3.4" ry="5" fill="${sk[1]}"/>
+   <path d="M26 52 C21 51 20 58 23 62 C25 65 27 64 27 61 Z" fill="${sk[1]}"/>
+   <path d="M74 52 C79 51 80 58 77 62 C75 65 73 64 73 61 Z" fill="${sk[1]}"/>
    <path d="${headPath(FACES[L.face%FACES.length])}" fill="${sk[0]}" transform="translate(50,52) scale(${child?0.94:1}) translate(-50,-52)"/>
    <g clip-path="url(#hd${id})"><path d="${headPath(FACES[L.face%FACES.length])}" fill="none" stroke="${sk[1]}" stroke-width="3" opacity=".35"/></g>
    ${mark}
    ${(()=>{const B=BROWS[(L.brow||0)%BROWS.length];
      const w={Neutral:1.7,Heavy:2.8,Fine:1.1,Angled:1.8,Raised:1.6}[B];
-     const d={Neutral:"M33 48q5 -3 10 -1M67 48q-5 -3 -10 -1",
-              Heavy:"M32 48q6 -4 11 -1M68 48q-6 -4 -11 -1",
-              Fine:"M34 48q4 -2 9 -1M66 48q-4 -2 -9 -1",
-              Angled:"M33 50q5 -5 10 -3M67 50q-5 -5 -10 -3",
-              Raised:"M33 46q5 -3 10 -1M67 46q-5 -3 -10 -1"}[B];
+     const d={Neutral:"M33 53q5 -3 10 -1M67 53q-5 -3 -10 -1",
+              Heavy:"M32 53q6 -4 11 -1M68 53q-6 -4 -11 -1",
+              Fine:"M34 53q4 -2 9 -1M66 53q-4 -2 -9 -1",
+              Angled:"M33 55q5 -5 10 -3M67 55q-5 -5 -10 -3",
+              Raised:"M33 51q5 -3 10 -1M67 51q-5 -3 -10 -1"}[B];
      return `<g stroke="${hc[0]}" stroke-width="${w}" stroke-linecap="round" opacity=".9"><path d="${d}"/></g>`})()}
    <g transform="translate(50,${eyeY}) scale(${child?1.16:elder?0.94:1}) translate(-50,${-eyeY})">
      <path d="${eyeShape(EYESHAPE[L.eye%EYESHAPE.length],38)}" transform="translate(0,${eyeY})" fill="#fff" stroke="#2A2A33" stroke-width=".7"/>
@@ -1471,11 +1472,11 @@ function portrait(p,size,opt){
      <path d="M34 63q-2 4 -1 7M66 63q2 4 1 7"/>
      ${old?`<path d="M40 44q10 -3 20 0"/>`:""}</g>`:""}
    ${(()=>{const N=NOSES[(L.nose==null?1:L.nose)%NOSES.length];
-     const d={Small:"M50 61v3l-1.5 .8",Straight:"M50 60v4l-2 1",Wide:"M50 60v4l-3 1M50 64l3 1",Sharp:"M50 59v5l-2 .6"}[N];
+     const d={Small:"M50 65v3l-1.5 .8",Straight:"M50 64v4l-2 1",Wide:"M50 64v4l-3 1M50 68l3 1",Sharp:"M50 63v5l-2 .6"}[N];
      return `<path d="${d}" fill="none" stroke="${sk[1]}" stroke-width=".9" stroke-linecap="round"/>`})()}
    ${(()=>{const M=MOUTHS[(L.mouth||0)%MOUTHS.length];
-     const d={"Neutral":"M45 70q5 3 10 0","Slight smile":"M44 69q6 5 12 0","Flat":"M45 70h10",
-              "Grin":"M43 68q7 7 14 0q-7 3 -14 0","Downturned":"M45 71q5 -3 10 0"}[M];
+     const d={"Neutral":"M45 73q5 3 10 0","Slight smile":"M44 72q6 5 12 0","Flat":"M45 73h10",
+              "Grin":"M43 71q7 7 14 0q-7 3 -14 0","Downturned":"M45 74q5 -3 10 0"}[M];
      return `<path d="${d}" fill="none" stroke="#8A5A50" stroke-width="1.1" stroke-linecap="round"/>`})()}
    ${band}
    ${hair.f?`<path d="${hair.f}" fill="url(#hr${id})"/>`:""}
