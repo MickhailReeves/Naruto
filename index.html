@@ -848,6 +848,9 @@ function playerAt(seat){
   return (S.P||[]).find(q=>q&&q.seat===seat)||null;
 }
 function forcedVillage(seat){
+  // in duo the pairings are not set until everyone is in, so at creation
+  // there is nobody to be forced to match
+  if(S.mode==="duo"&&!S.pairingSet)return null;
   const chooser=villageChooser(seat);
   if(chooser===seat)return null;                       // you pick your own
   const p=playerAt(chooser);
@@ -1331,11 +1334,17 @@ function dojutsuOf(p){
   for(const id of order){const e=p.kgs.find(x=>x.id===id);if(e)return {id,lvl:e.lvl}}
   return null;
 }
-let _pid=0;
+function lookKey(p,L,s,opt){
+  const o=opt||{};
+  const dj=dojutsuOf(p);
+  return "p"+[L.face,L.skin,L.hair,L.hcol,L.eye,L.ecol,L.mark,s,
+    p.village||"",p.rogue?1:0,p.age==null?20:(p.age<13?0:p.age>=64?2:p.age>=50?1:3),
+    dj?dj.id+dj.lvl:"",o.noBand?1:0,o.noEyes?1:0].join("_").replace(/[^A-Za-z0-9_]/g,"");
+}
 function portrait(p,size,opt){
   opt=opt||{};
   const L=p.look||defaultLook();
-  const s=size||96,id="p"+(_pid++);
+  const s=size||96;
   const sk=SKIN[L.skin%SKIN.length];
   const age=(p.age==null?20:p.age);
   const child=age<13, elder=age>=50, old=age>=64;
@@ -1346,6 +1355,7 @@ function portrait(p,size,opt){
   }
   const ec=EYECOL[L.ecol%EYECOL.length][0];
   const hair=hairPaths(HAIRS[L.hair%HAIRS.length]);
+  const id=lookKey(p,L,s,opt);
   const dj=opt.noEyes?null:dojutsuOf(p);
   const eyeY=54;
   let iris=`<circle cx="0" cy="0" r="3.1" fill="${ec}"/><circle cx="1" cy="-1" r="1.1" fill="#fff" opacity=".85"/>`;
@@ -1806,17 +1816,24 @@ function render(){
   // polling calls this every couple of seconds; repainting identical markup
   // throws away focus, scroll position and any open dropdown
   if(html!==NET.lastHTML){NET.lastHTML=html;a.innerHTML=html}
-  const old=document.querySelector(".veil"); if(old)old.remove();
-  if(S.joint&&S.joint.started&&jointInvolvesMe()) document.body.insertAdjacentHTML("beforeend",viewJoint());
-  else if(S.joint&&jointAsksMe()&&canAct()) document.body.insertAdjacentHTML("beforeend",viewJointInvite());
-  else if(S.field) document.body.insertAdjacentHTML("beforeend",viewField());
-  else if(S.battle) document.body.insertAdjacentHTML("beforeend",viewBattle());
-  else if(S.exam) document.body.insertAdjacentHTML("beforeend",viewExam());
-  else if(S.resetReq) document.body.insertAdjacentHTML("beforeend",viewReset());
-  else if(NET.pending) document.body.insertAdjacentHTML("beforeend",viewModal());
-  if(AUD.panel) document.body.insertAdjacentHTML("beforeend",viewAudio());
-  else if(NET.godAsk) document.body.insertAdjacentHTML("beforeend",viewGodGate());
-  else if(NET.godOpen) document.body.insertAdjacentHTML("beforeend",viewGodPanel());
+  let veil="";
+  if(S.joint&&S.joint.started&&jointInvolvesMe()) veil=viewJoint();
+  else if(S.joint&&jointAsksMe()&&canAct()) veil=viewJointInvite();
+  else if(S.field) veil=viewField();
+  else if(S.battle) veil=viewBattle();
+  else if(S.exam) veil=viewExam();
+  else if(S.resetReq) veil=viewReset();
+  else if(NET.pending) veil=viewModal();
+  if(AUD.panel) veil=viewAudio();
+  else if(NET.godAsk) veil=viewGodGate();
+  else if(NET.godOpen) veil=viewGodPanel();
+  // rebuild the overlay only when it actually changes, or a poll every couple
+  // of seconds tears the open panel down and puts an identical one back
+  if(veil!==NET.lastVeil){
+    NET.lastVeil=veil;
+    const old=document.querySelector(".veil"); if(old)old.remove();
+    if(veil) document.body.insertAdjacentHTML("beforeend",veil);
+  }
   const bl=document.getElementById("blog"); if(bl)bl.scrollTop=bl.scrollHeight;
   // the client that owns the turn rolls its own life event, so nothing waits on the other machine
   if(S.screen==="game"&&!locked())maybeExplain();
@@ -1889,26 +1906,65 @@ function viewTitle(){
 function setCount(n){S.np=n;if(n===1)S.mode="solo";else if(S.mode==="solo")S.mode=null;render()}
 function setMode(m){
   S.mode=m;
-  if(m==="duo"){S.screen="pairing";render();return}
   S.screen="create";S.creating=0;S.draft=newDraft();render();
 }
 function viewPairing(){
+  const host=!online()||NET.seat===0;
+  const P=S.P||[];
+  const pv=PAIRINGS[S.pairing||0];
   return `<div style="padding:26px 0">
-    <div class="eyebrow">Duo mode \u00b7 player one decides</div>
+    <div class="eyebrow">Everyone is in \u00b7 player one sets the teams</div>
     <h1 style="font-size:clamp(24px,5vw,38px)">WHO PAIRS<br><span class="tt">WITH WHO</span></h1>
-    <p class="dim" style="max-width:520px">Each duo shares a village. The lower numbered player in each pair chooses where
-      they are both from, and the other one's family will have moved there.</p>
-    <div class="grid" style="margin-top:14px;max-width:520px">
-      ${PAIRINGS.map((P,i)=>`<button class="act ${(S.pairing||0)===i?"hot":""}" onclick="S.pairing=${i};render()">
-        <span class="ic">${(S.pairing||0)===i?"\u25C9":"\u25CB"}</span>
-        <span class="tx"><b>${esc(pairingLabel(i))}</b>
-        <span>${["P1 and P2 pick their villages","P1 and P2 pick their villages","P1 and P2 pick their villages"][i]}</span></span></button>`).join("")}
+    <p class="dim" style="max-width:560px">Each duo works out of one village. The lower numbered player in a pair
+      keeps theirs, and the other one's family will have moved there before they were born.</p>
+    <div class="grid g2" style="margin:14px 0;max-width:760px">
+      ${P.map(q=>`<div class="seat"><div style="display:flex;gap:11px;align-items:center">
+        ${portrait(q,44)}
+        <div style="min-width:0"><div class="nm">${esc(q.name)}</div>
+        <div class="eyebrow">${esc(VILLAGES[q.village].en)} \u00b7 ${esc(CLANS[q.clan].n)} \u00b7 ${NATICON[q.nat]} ${q.nat}</div></div>
+      </div></div>`).join("")}
     </div>
-    <div class="row" style="margin-top:14px">
-      <button class="bkey" onclick="S.screen='create';S.creating=0;S.draft=newDraft();render()">Lock the teams in</button>
-      <button onclick="${'online()?leaveRoom():(S.screen=\'title\',render())'}">Back</button>
-    </div>
+    ${host?`
+      <div class="grid" style="max-width:620px">
+        ${PAIRINGS.map((pair,i)=>`<button class="act ${(S.pairing||0)===i?"hot":""}" onclick="S.pairing=${i};touch();render()">
+          <span class="ic">${(S.pairing||0)===i?"\u25C9":"\u25CB"}</span>
+          <span class="tx"><b>${pair.map(t=>t.map(x=>esc(P[x]?P[x].name:"P"+(x+1))).join(" and ")).join("   vs   ")}</b>
+          <span>${pair.map(t=>{const low=Math.min(...t);
+            return esc(P[low]?P[low].name:"P"+(low+1))+"'s "+esc(P[low]?VILLAGES[P[low].village].en:"village")}).join(" \u00b7 ")}</span></span></button>`).join("")}
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="bkey" onclick="lockPairing()">Lock the teams in and begin</button>
+      </div>`
+    :`<div class="ribbon c" style="max-width:620px">Waiting for ${esc(P[0]?P[0].name:"player one")} to set the teams.
+        <small>Currently: ${pv.map(t=>t.map(x=>esc(P[x]?P[x].name:"P"+(x+1))).join(" and ")).join("  vs  ")}</small></div>`}
   </div>`;
+}
+/* The lower seat in each pair keeps their village; their partner is written in
+   as having moved there. */
+function lockPairing(){
+  if(online()&&NET.seat!==0)return;
+  if(!S.P||S.P.length<seatsWanted()||S.P.some(q=>!q)){
+    say("Not everyone's file has arrived yet.","Registry","bad");render();return;
+  }
+  S.pairingSet=true;
+  const pair=PAIRINGS[S.pairing||0];
+  pair.forEach(team=>{
+    const low=Math.min(...team);
+    const home=S.P[low]?S.P[low].village:null;
+    team.forEach(seat=>{
+      const q=S.P[seat];if(!q)return;
+      q.team=teamForSeat(seat);
+      if(home&&q.village!==home){
+        const was=VILLAGES[q.village].en;
+        q.village=home;
+        q.migrated=!clanNativeTo(q.clan,home);
+        say(`${q.name}'s family left ${was} for ${VILLAGES[home].en} before they were born. ${
+          q.migrated?"The "+CLANS[q.clan].n+" name is not from here and the neighbours have never quite stopped noticing.":"They settled in easily enough."}`,q.name,"big");
+      }else if(q)q.team=teamForSeat(seat);
+    });
+  });
+  startGame();
+  if(online())pushState();
 }
 function newDraft(){return{name:"",gender:"Male",village:"konoha",look:randomLook()}}
 
@@ -2059,11 +2115,14 @@ function confirmPlayer(){
     if(Object.keys(S.pend).length<seatsWanted()){
       S.screen="waiting";pushState();render();return;
     }
-    assemble();startGame();return;
+    assemble();
+    if(S.mode==="duo"&&!S.pairingSet){S.screen="pairing";pushState();render();return}
+    startGame();return;
   }
   if(S.P.length<seatsWanted()){
     S.creating=S.P.length;S.draft=newDraft();render();return;
   }
+  if(S.mode==="duo"&&!S.pairingSet){S.screen="pairing";render();return}
   startGame();
 }
 /* Once every seat has filed, lay them out in seat order. */
@@ -6613,6 +6672,9 @@ function adoptRemote(rem){
   const enrolling=rem.pend&&Object.keys(rem.pend).length;
   if((!rem.P||!rem.P.length)&&!enrolling)return;
   const seat=NET.seat;
+  // player one has just set the teams and rewritten who lives where; a room
+  // that has not heard about it yet must not be allowed to undo that
+  if(S.pairingSet&&!rem.pairingSet)return;
   if((rem.year||0)>(S.year||0)){
     const keep=(S.music&&(S.music.at||0)>((rem.music&&rem.music.at)||0))?S.music:null;
     S=rem;if(keep)S.music=keep;return;                  // they rolled the year over
@@ -6638,6 +6700,17 @@ function adoptRemote(rem){
     if(rem.ended)S.ended[i]=!!rem.ended[i];
   }
   S.np=rem.np||S.np;S.pairing=rem.pairing!=null?rem.pairing:S.pairing;
+  if(rem.screen==="pairing"&&S.screen==="waiting"&&rem.P&&rem.P.length>=(rem.np||S.np||2)){
+    const mine=S.P&&S.P[seat]?S.P[seat]:(S.pend?S.pend[seat]:null);
+    S.P=rem.P.slice();
+    if(mine)S.P[seat]=mine;
+    S.pend=null;S.screen="pairing";
+  }
+  if(rem.pairingSet&&!S.pairingSet){
+    S.pairingSet=true;S.pairing=rem.pairing;
+    if(rem.P&&rem.P.length)S.P=rem.P;
+    if(rem.screen==="game")S.screen="game";
+  }
   // the last seat to file starts the chronicle; everyone else follows here
   if(S.screen==="waiting"&&(rem.screen==="game"||rem.screen==="legacy")){
     S.screen=rem.screen;S.year=rem.year;S.ended=(rem.ended||[]).slice();
@@ -6653,7 +6726,13 @@ function adoptRemote(rem){
   if(rem.pend){
     if(!S.pend)S.pend={};
     Object.keys(rem.pend).forEach(k=>{if(+k!==seat&&!S.pend[k])S.pend[k]=rem.pend[k]});
-    if(Object.keys(S.pend).length>=(rem.np||S.np||2)&&S.screen==="waiting"){assemble();if(S.P.length===seatsWanted())startGame()}
+    if(Object.keys(S.pend).length>=(rem.np||S.np||2)&&S.screen==="waiting"){
+      assemble();
+      if(S.P.length===seatsWanted()){
+        if(S.mode==="duo"&&!S.pairingSet)S.screen="pairing";
+        else startGame();
+      }
+    }
   }
   if(rem.seen){if(!S.seen)S.seen={};Object.keys(rem.seen).forEach(k=>{
     if(+k!==seat)S.seen[k]=Math.max(S.seen[k]||0,rem.seen[k])})}
@@ -6698,7 +6777,7 @@ function hostSetup(m){
   const n=S.np||2,pair=S.pairing||0;
   NET.room=makeCode();NET.seat=0;NET.status="room open";
   S=freshState();S.mode=m;S.np=n;S.pairing=pair;
-  if(m==="duo"){S.screen="pairing";startPolling();render();return}
+  if(m==="duo"){S.screen="create";S.creating=0;S.draft=newDraft();startPolling();render();return}
   S.screen="create";S.creating=0;S.draft=newDraft();
   startPolling();render();
 }
